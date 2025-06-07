@@ -84,7 +84,7 @@ def replace_watch_screen(image_path, mask_path, prompt, output_path):
                 "image": open(image_path, "rb"),
                 "mask": open(mask_path, "rb"),
                 "guidance_scale": 7.5,
-                "negative_prompt": "blurry, distorted, low quality, unrealistic, wrong perspective",
+                "negative_prompt": "no screen interface, no UI, no text, no icons, no glowing display, no reflections on screen, no watch face design, no digital elements, no time display, no notifications",
                 "num_inference_steps": 50,
                 "scheduler": "K_EULER"
             }
@@ -168,7 +168,7 @@ def process_image():
             mask_path = create_screen_mask(image_path, prompt)
 
         # 4) Prepare prompt and output path
-        replacement_prompt = request.form.get('prompt', 'change the smartwatch screen for a full black smartwatch')
+        replacement_prompt = request.form.get('prompt', 'a completely black, powered-off display screen, no interface visible, blank black screen, matte black watch face, modern design, worn on wrist, realistic lighting, photorealistic, high detail, sharp focus, the display is completely dark and inactive, no UI elements, no text, no icons, no glow')
         
         # 5) Replace screen
         success = replace_watch_screen(image_path, mask_path, replacement_prompt, output_path)
