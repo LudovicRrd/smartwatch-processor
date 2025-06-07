@@ -6,3 +6,4 @@ numpy==1.24.3
 Flask==2.3.2
 requests==2.31.0
 replicate==0.25.1
+gunicorn==20.1.0
