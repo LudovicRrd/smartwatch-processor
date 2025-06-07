@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: smartwatch-processor
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: REPLICATE_API_TOKEN
+        sync: false  # You'll set this in Render dashboard
+    healthCheckPath: /
+    disk:
+      name: smartwatch-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
