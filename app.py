@@ -151,7 +151,7 @@ def process_image():
         text = request.form.get("text", "Default text for overlay image")
         text_parts = split_text_into_two(text)
 
-        background_path = "background.jpg"
+        background_path = "background.png"
 
         final_path = "results/final_image.jpg"
 
