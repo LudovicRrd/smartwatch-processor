@@ -3,8 +3,6 @@ from PIL import Image, ImageDraw, ImageFont
 import requests
 import io
 import os
-import random
-import string
 
 app = Flask(__name__)
 
@@ -12,9 +10,8 @@ app = Flask(__name__)
 os.makedirs("results", exist_ok=True)
 
 
-def download_quicksand_font():
+def download_quicksand_font(font_size=90):
     font_url = "https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkBgv58a-xw.ttf"
-    font_size = 55
     try:
         response = requests.get(font_url)
         if response.status_code == 200:
@@ -30,6 +27,17 @@ def download_quicksand_font():
             return ImageFont.truetype("arial.ttf", font_size)
         except:
             return ImageFont.load_default()
+
+
+def resize_to_full_width(image, target_width):
+    original_width, original_height = image.size
+    if original_width == 0:
+        return image, (0, 0)
+    ratio = target_width / original_width
+    new_height = int(original_height * ratio + 0.5)
+    resized = image.resize((target_width, new_height),
+                           Image.Resampling.LANCZOS)
+    return resized, (0, 0)
 
 
 def resize_image(image, target_size):
@@ -51,75 +59,114 @@ def resize_image(image, target_size):
     return resized, (x_offset, y_offset)
 
 
-def split_text_into_two(text):
+def split_text_into_lines(text, font, max_width, num_lines=5):
+    if not text or not text.strip():
+        return [""] * num_lines
     words = text.split()
     total_words = len(words)
-    mid_index = total_words // 2
-    part1 = " ".join(words[:mid_index])
-    part2 = " ".join(words[mid_index:])
-    return part1, part2
+    if total_words == 0:
+        return [""] * num_lines
+    part_size = max(1, total_words // num_lines)
+    parts = []
+    for i in range(num_lines):
+        start = i * part_size
+        end = start + part_size if i < num_lines - 1 else total_words
+        line_words = words[start:end]
+        line_text = " ".join(line_words)
+        # Truncate to fit width
+        while font.getlength(line_text) > max_width and len(line_words) > 0:
+            if len(line_words) > 1:
+                line_words.pop()
+                line_text = " ".join(line_words)
+            else:
+                line_text = line_words[
+                    0][:int(max_width / (font.getlength("A") or 1) *
+                            0.8)] + "..." if line_words else "..."
+                break
+        parts.append(line_text if line_text else " ")
+        if i >= num_lines - 1:
+            break
+    return parts
 
 
-def create_centered_text(draw, text_parts, font, image_size, y_offset=0):
-    image_width = image_size[0]
-    top_text, bottom_text = text_parts
+def create_top_left_text_over_image(draw,
+                                    text,
+                                    subtitle,
+                                    font_size_main=100,
+                                    image_size=(1080, 1920),
+                                    margin=50,
+                                    line_spacing=0):
+    max_w = image_size[0] - 2 * margin
 
-    top_bbox = draw.textbbox((0, 0), top_text, font=font)
-    top_w = top_bbox[2] - top_bbox[0]
-    top_h = top_bbox[3] - top_bbox[1]
+    # Main title font and lines (5 lines max)
+    font_main = download_quicksand_font(font_size_main)
+    main_lines = split_text_into_lines(text, font_main, max_w, num_lines=5)
 
-    bottom_bbox = draw.textbbox((0, 0), bottom_text, font=font)
-    bottom_w = bottom_bbox[2] - bottom_bbox[0]
-    bottom_h = bottom_bbox[3] - bottom_bbox[1]
+    # Compute line height for main
+    ascent_main, descent_main = font_main.getmetrics()
+    line_height_main = ascent_main + descent_main + line_spacing
 
-    spacing = 1
-    total_h = top_h + bottom_h + spacing
+    y = margin
+    for line in main_lines:
+        x = margin
+        draw.text((x, y), line, font=font_main, fill='white')
+        y += line_height_main
 
-    center_y = image_size[1] // 7 + y_offset
-    top_y = center_y - total_h // 2
-    bottom_y = top_y + top_h + spacing
+    # Subtitle below main (up to 2 lines, half size)
+    if subtitle.strip():
+        font_sub = download_quicksand_font(font_size_main // 2)
+        sub_lines = split_text_into_lines(subtitle,
+                                          font_sub,
+                                          max_w,
+                                          num_lines=2)
 
-    draw.text(((image_width - top_w) // 2, top_y),
-              top_text,
-              font=font,
-              fill='white')
-    draw.text(((image_width - bottom_w) // 2, bottom_y),
-              bottom_text,
-              font=font,
-              fill='white')
+        # Extra spacing between title and subtitle (10px for separation)
+        y += 10
 
-    return total_h
+        # Compute line height for subtitle
+        ascent_sub, descent_sub = font_sub.getmetrics()
+        line_height_sub = ascent_sub + descent_sub + line_spacing
+
+        for line in sub_lines:
+            x = margin
+            draw.text((x, y), line, font=font_sub, fill='white')
+            y += line_height_sub
+
+    return y  # Total height used by text
 
 
 def create_composite_image(
-        background_path,
-        overlay_image,  # now an Image object
-        output_path,
-        text_parts,
-        output_size=(850, 750),
-        text_y_offset=0):
+    background_path,
+    overlay_image,  # Image object
+    output_path,
+    text,
+    subtitle,
+    output_size=(1080, 1920)):  # 9:16 aspect ratio
     try:
+        # Load and resize background image
         background = Image.open(background_path)
         if background.mode != 'RGB':
             background = background.convert('RGB')
         resized_bg, bg_off = resize_image(background, output_size)
-        composite = Image.new('RGB', output_size)
+
+        # Initialize composite with #F7F7F7 for any extra unfilled areas
+        composite = Image.new('RGB', output_size, color=(247, 247, 247))
         composite.paste(resized_bg, bg_off)
 
+        # Prepare overlay (input image) to full width, preserving aspect
         if overlay_image.mode != 'RGBA':
             overlay_image = overlay_image.convert('RGBA')
-        overlay_max_size = (output_size[0], output_size[0] // 3)
-        resized_overlay, overlay_off = resize_image(overlay_image,
-                                                    overlay_max_size)
-        overlay_x = (output_size[0] - resized_overlay.size[0]) // 2
-        overlay_y = (output_size[1] - resized_overlay.size[1]) // 2
-        composite.paste(resized_overlay, (overlay_x, overlay_y),
-                        resized_overlay)
+        resized_overlay, _ = resize_to_full_width(overlay_image,
+                                                  output_size[0])
+        # Paste at top-left (full width, full height for 9:16 input)
+        composite.paste(resized_overlay, (0, 0), resized_overlay)
 
         draw = ImageDraw.Draw(composite)
-        font = download_quicksand_font()
-        create_centered_text(draw, text_parts, font, output_size,
-                             text_y_offset)
+        create_top_left_text_over_image(draw,
+                                        text,
+                                        subtitle,
+                                        font_size_main=100,
+                                        image_size=output_size)
 
         composite.save(output_path, 'JPEG', quality=95)
         return True, "Composite created successfully!"
@@ -129,13 +176,13 @@ def create_composite_image(
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Hello! This endpoint uses a super background + a URL overlay image."
+    return "Hello! This endpoint creates 9:16 ads with background, full-width top overlay, tight bold 5-line title + optional subtitle (half size, left-aligned), and #F7F7F7 fill."
 
 
 @app.route("/process-image", methods=["POST"])
 def process_image():
     try:
-        # Get the overlay image from an URL string
+        # Get the overlay image from URL
         image_url = request.form.get("image_url")
         if not image_url:
             return jsonify({"error": "No 'image_url' provided"}), 400
@@ -147,20 +194,21 @@ def process_image():
 
         overlay_image = Image.open(io.BytesIO(response.content))
 
-        # Retrieve the text and split it
-        text = request.form.get("text", "Default text for overlay image")
-        text_parts = split_text_into_two(text)
+        # Retrieve the text and subtitle
+        text = request.form.get("text", "Default title text overlay on image")
+        subtitle = request.form.get("subtitle",
+                                    "")  # New optional subtitle input
 
-        background_path = "background.png"
+        background_path = "background-p3.png"
 
         final_path = "results/final_image.jpg"
 
         success, msg = create_composite_image(background_path=background_path,
                                               overlay_image=overlay_image,
                                               output_path=final_path,
-                                              text_parts=text_parts,
-                                              output_size=(1640, 840),
-                                              text_y_offset=-50)
+                                              text=text,
+                                              subtitle=subtitle,
+                                              output_size=(1080, 1920))
 
         if not success:
             return jsonify({"error": msg}), 500
@@ -173,4 +221,3 @@ def process_image():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)
-
