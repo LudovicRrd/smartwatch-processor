@@ -118,9 +118,9 @@ def create_top_left_text_over_image(
     line_height_main = ascent_main + descent_main + line_spacing
 
     # Colors (RGBA) for background strips
-    title_bg_color = (255, 140, 0, int(255 * title_bg_opacity))  # orange
-    subtitle_bg_color = (68, 159, 119, int(255 * subtitle_bg_opacity))  # green
-    cta_bg_color = (220, 0, 0, int(255 * cta_bg_opacity))  # red
+    title_bg_color = (56, 56, 56, int(255 * title_bg_opacity))  # orange
+    subtitle_bg_color = (56, 56, 56, int(255 * subtitle_bg_opacity))  # green
+    cta_bg_color = (68, 159, 119, int(255 * cta_bg_opacity))  # red
 
     pad_x = 30
     pad_y = 20
