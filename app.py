@@ -12,7 +12,7 @@ app = Flask(__name__)
 os.makedirs("results", exist_ok=True)
 
 
-def download_quicksand_font(font_size=80):
+def download_quicksand_font(font_size=70):
     font_url = "https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkBgv58a-xw.ttf"
     try:
         response = requests.get(font_url)
@@ -105,7 +105,7 @@ def create_left_text_with_subtitle_and_cta(
     top_text, bottom_text = text_parts
 
     # Left margin for all text
-    margin_x = 120
+    margin_x = 260
 
     # Measure title lines
     top_bbox = draw.textbbox((0, 0), top_text, font=font)
@@ -166,7 +166,7 @@ def create_left_text_with_subtitle_and_cta(
     sub_h = 0
 
     if subtitle.strip():
-        sub_font_size = max(60, font.size // 2.2)
+        sub_font_size = max(50, font.size // 2.2)
         sub_font = download_quicksand_font(sub_font_size)
 
         sub_bbox = draw.textbbox((0, 0), subtitle, font=sub_font)
@@ -197,11 +197,11 @@ def create_left_text_with_subtitle_and_cta(
     # CTA button under subtitle, red pill, slightly larger font than subtitle
     if cta_text.strip():
         if subtitle.strip():
-            base_font_size = max(60, font.size // 2.2)
+            base_font_size = max(50, font.size // 2.2)
         else:
-            base_font_size = max(60, font.size // 2.2)
+            base_font_size = max(50, font.size // 2.2)
 
-        cta_font_size = max(60, font.size // 2.2)  # a bit bigger than subtitle
+        cta_font_size = max(50, font.size // 2.2)  # a bit bigger than subtitle
         cta_font = download_quicksand_font(cta_font_size)
 
         cta_bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
@@ -218,7 +218,7 @@ def create_left_text_with_subtitle_and_cta(
         cta_pad_y = 40
 
         rect_x0 = max(0, margin_x - cta_pad_x)
-        rect_y0 = max(0, cta_y - cta_pad_y // 3)
+        rect_y0 = max(0, cta_y - cta_pad_y // 4)
         rect_x1 = min(image_width, margin_x + cta_w + cta_pad_x)
         rect_y1 = rect_y0 + cta_h + cta_pad_y
 
@@ -258,7 +258,7 @@ def create_composite_image(
         if overlay_image.mode != 'RGBA':
             overlay_image = overlay_image.convert('RGBA')
 
-        overlay_target_height = int(output_size[1] * 5 / 6)
+        overlay_target_height = int(output_size[1] * 4 / 5)
         overlay_target_size = (output_size[0], overlay_target_height)
 
         resized_overlay = resize_image_cover(overlay_image,
