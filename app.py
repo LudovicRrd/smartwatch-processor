@@ -239,7 +239,7 @@ def create_composite_image(
         text_parts,
         subtitle,
         cta_text,
-        output_size=(1100, 1100),
+        output_size=(825, 1100),
         text_y_offset=0,
         overlay_opacity=0.1):
     """
