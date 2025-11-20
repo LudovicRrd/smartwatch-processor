@@ -10,7 +10,7 @@ app = Flask(__name__)
 os.makedirs("results", exist_ok=True)
 
 
-def download_quicksand_font(font_size=90):
+def download_quicksand_font(font_size=80):
     font_url = "https://fonts.gstatic.com/s/quicksand/v30/6xK-dSZaM9iE8KbpRA_LJ3z8mH9BOJvgkBgv58a-xw.ttf"
     try:
         response = requests.get(font_url)
@@ -89,14 +89,25 @@ def split_text_into_lines(text, font, max_width, num_lines=5):
     return parts
 
 
-def create_top_left_text_over_image(draw,
-                                    text,
-                                    subtitle,
-                                    font_size_main=100,
-                                    image_size=(1080, 1920),
-                                    margin=50,
-                                    line_spacing=0):
+def create_top_left_text_over_image(
+        base_image,  # RGB image
+        text,
+        subtitle,
+        font_size_main=90,
+        image_size=(1080, 1920),
+        margin=50,
+        line_spacing=0,
+        title_bg_opacity=0.6,
+        subtitle_bg_opacity=0.6,
+        corner_radius=25  # new: rounded corner radius in px
+):
+    """
+    Draw title + subtitle, with adaptive semi-transparent strips behind each line. [web:1][web:8]
+    """
     max_w = image_size[0] - 2 * margin
+
+    # Use RGBA drawing mode on an RGB image so alpha blends correctly. [web:8]
+    draw = ImageDraw.Draw(base_image, "RGBA")
 
     # Main title font and lines (5 lines max)
     font_main = download_quicksand_font(font_size_main)
@@ -106,10 +117,32 @@ def create_top_left_text_over_image(draw,
     ascent_main, descent_main = font_main.getmetrics()
     line_height_main = ascent_main + descent_main + line_spacing
 
+    # Colors (RGBA) for background strips
+    title_bg_color = (255, 140, 0, int(255 * title_bg_opacity)
+                      )  # orange [web:1]
+    subtitle_bg_color = (68, 159, 119, int(255 * subtitle_bg_opacity)
+                         )  # green [web:1]
+
+    # Padding around text in the strip
+    pad_x = 30
+    pad_y = 20
+
     y = margin
+
+    # Draw title lines with orange background
     for line in main_lines:
-        x = margin
-        draw.text((x, y), line, font=font_main, fill='white')
+        if line.strip():
+            text_width = font_main.getlength(line)
+            rect_x0 = max(0, margin - pad_x)
+            rect_y0 = max(0, y - pad_y // 2)
+            rect_x1 = min(image_size[0], margin + int(text_width) + pad_x)
+            rect_y1 = min(image_size[1], y + line_height_main + pad_y // 2)
+
+            draw.rounded_rectangle([(rect_x0, rect_y0), (rect_x1, rect_y1)],
+                                   radius=corner_radius,
+                                   fill=title_bg_color)
+
+        draw.text((margin, y), line, font=font_main, fill='white')
         y += line_height_main
 
     # Subtitle below main (up to 2 lines, half size)
@@ -127,29 +160,44 @@ def create_top_left_text_over_image(draw,
         ascent_sub, descent_sub = font_sub.getmetrics()
         line_height_sub = ascent_sub + descent_sub + line_spacing
 
+        # Draw subtitle lines with green background
         for line in sub_lines:
-            x = margin
-            draw.text((x, y), line, font=font_sub, fill='white')
+            if line.strip():
+                text_width = font_sub.getlength(line)
+                rect_x0 = max(0, margin - pad_x)
+                rect_y0 = max(0, y - pad_y // 2)
+                rect_x1 = min(image_size[0], margin + int(text_width) + pad_x)
+                rect_y1 = min(image_size[1], y + line_height_sub + pad_y // 2)
+
+                draw.rounded_rectangle([(rect_x0, rect_y0),
+                                        (rect_x1, rect_y1)],
+                                       radius=corner_radius,
+                                       fill=subtitle_bg_color)
+
+            draw.text((margin, y), line, font=font_sub, fill='white')
             y += line_height_sub
 
     return y  # Total height used by text
 
 
 def create_composite_image(
-    background_path,
-    overlay_image,  # Image object
-    output_path,
-    text,
-    subtitle,
-    output_size=(1080, 1920)):  # 9:16 aspect ratio
+        background_path,
+        overlay_image,  # Image object
+        output_path,
+        text,
+        subtitle,
+        output_size=(1080, 1920),
+        overlay_opacity=0.4  # 0.0 to 1.0 for black overlay on the photo
+):
     try:
         # Load and resize background image
         background = Image.open(background_path)
         if background.mode != 'RGB':
             background = background.convert('RGB')
+
         resized_bg, bg_off = resize_image(background, output_size)
 
-        # Initialize composite with #F7F7F7 for any extra unfilled areas
+        # IMPORTANT: keep composite in RGB so RGBA drawing blends alpha. [web:8]
         composite = Image.new('RGB', output_size, color=(247, 247, 247))
         composite.paste(resized_bg, bg_off)
 
@@ -158,14 +206,21 @@ def create_composite_image(
             overlay_image = overlay_image.convert('RGBA')
         resized_overlay, _ = resize_to_full_width(overlay_image,
                                                   output_size[0])
-        # Paste at top-left (full width, full height for 9:16 input)
+
+        # Paste main photo at top-left (full width)
         composite.paste(resized_overlay, (0, 0), resized_overlay)
 
-        draw = ImageDraw.Draw(composite)
-        create_top_left_text_over_image(draw,
-                                        text,
-                                        subtitle,
-                                        font_size_main=100,
+        # Add transparent black overlay over the image area (behind text). [web:1]
+        overlay_height = resized_overlay.height
+        overlay_layer = Image.new('RGBA', (output_size[0], overlay_height),
+                                  color=(0, 0, 0, int(255 * overlay_opacity)))
+        composite.paste(overlay_layer, (0, 0), overlay_layer)
+
+        # Draw title + subtitle with their own colored strips. [web:1][web:8]
+        create_top_left_text_over_image(base_image=composite,
+                                        text=text,
+                                        subtitle=subtitle,
+                                        font_size_main=90,
                                         image_size=output_size)
 
         composite.save(output_path, 'JPEG', quality=95)
@@ -176,7 +231,7 @@ def create_composite_image(
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Hello! This endpoint creates 9:16 ads with background, full-width top overlay, tight bold 5-line title + optional subtitle (half size, left-aligned), and #F7F7F7 fill."
+    return "Hello! This endpoint creates 9:16 ads with: background, full-width image overlay, transparent black overlay on the photo, and adaptive semi-transparent orange/green strips behind title and subtitle."
 
 
 @app.route("/process-image", methods=["POST"])
@@ -196,11 +251,12 @@ def process_image():
 
         # Retrieve the text and subtitle
         text = request.form.get("text", "Default title text overlay on image")
-        subtitle = request.form.get("subtitle",
-                                    "")  # New optional subtitle input
+        subtitle = request.form.get("subtitle", "")
+
+        # Optional overlay opacity parameter (0.0 to 1.0) for the black photo overlay
+        overlay_opacity = float(request.form.get("overlay_opacity", 0.4))
 
         background_path = "background-p3.png"
-
         final_path = "results/final_image.jpg"
 
         success, msg = create_composite_image(background_path=background_path,
@@ -208,7 +264,8 @@ def process_image():
                                               output_path=final_path,
                                               text=text,
                                               subtitle=subtitle,
-                                              output_size=(1080, 1920))
+                                              output_size=(1080, 1920),
+                                              overlay_opacity=overlay_opacity)
 
         if not success:
             return jsonify({"error": msg}), 500
