@@ -126,11 +126,11 @@ def create_left_text_with_subtitle_and_cta(
     bottom_y = top_y + top_h + spacing_title_lines
 
     # Colors (RGBA)
-    title_bg_color = (255, 140, 0, int(255 * title_bg_opacity)
+    title_bg_color = (56, 56, 56, int(255 * title_bg_opacity)
                       )  # orange for title
-    subtitle_bg_color = (0, 158, 96, int(255 * subtitle_bg_opacity)
+    subtitle_bg_color = (56, 56, 56, int(255 * subtitle_bg_opacity)
                          )  # green for subtitle
-    cta_bg_color = (220, 0, 0, int(255 * cta_bg_opacity))  # red for CTA
+    cta_bg_color = (68, 159, 119, int(255 * cta_bg_opacity))  # red for CTA
 
     pad_x = 50
     pad_y = 50
