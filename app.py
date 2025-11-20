@@ -166,7 +166,7 @@ def create_left_text_with_subtitle_and_cta(
     sub_h = 0
 
     if subtitle.strip():
-        sub_font_size = max(10, font.size // 2)
+        sub_font_size = max(60, font.size // 1.8)
         sub_font = download_quicksand_font(sub_font_size)
 
         sub_bbox = draw.textbbox((0, 0), subtitle, font=sub_font)
@@ -201,7 +201,7 @@ def create_left_text_with_subtitle_and_cta(
         else:
             base_font_size = max(60, font.size // 1.8)
 
-        cta_font_size = base_font_size + 0  # a bit bigger than subtitle
+        cta_font_size = max(60, font.size // 1.8)  # a bit bigger than subtitle
         cta_font = download_quicksand_font(cta_font_size)
 
         cta_bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
