@@ -104,7 +104,7 @@ def create_top_left_text_over_image(
         corner_radius=25,
         cta_corner_radius=50):
     """
-    Draw title + subtitle + CTA at top-left, with adaptive semi-transparent rounded strips. [web:3][web:21]
+    Draw title + subtitle + CTA at top-left, with adaptive semi-transparent rounded strips.
     """
     max_w = image_size[0] - 2 * margin
 
@@ -118,16 +118,16 @@ def create_top_left_text_over_image(
     line_height_main = ascent_main + descent_main + line_spacing
 
     # Colors (RGBA) for background strips
-    title_bg_color = (56, 56, 56, int(255 * title_bg_opacity))  # orange
-    subtitle_bg_color = (56, 56, 56, int(255 * subtitle_bg_opacity))  # green
-    cta_bg_color = (68, 159, 119, int(255 * cta_bg_opacity))  # red
+    title_bg_color = (56, 56, 56, int(255 * title_bg_opacity))
+    subtitle_bg_color = (56, 56, 56, int(255 * subtitle_bg_opacity))
+    cta_bg_color = (68, 159, 119, int(255 * cta_bg_opacity))
 
     pad_x = 30
     pad_y = 20
 
     y = margin
 
-    # Title lines with orange background
+    # Title lines
     for line in main_lines:
         if line.strip():
             text_width = font_main.getlength(line)
@@ -143,7 +143,7 @@ def create_top_left_text_over_image(
         draw.text((margin, y), line, font=font_main, fill='white')
         y += line_height_main
 
-    # Subtitle (up to 2 lines, half size, green)
+    # Subtitle (up to 2 lines)
     sub_font = None
     sub_line_height = 0
     last_sub_y = y
@@ -180,9 +180,8 @@ def create_top_left_text_over_image(
             last_sub_y = y
             y += line_height_sub
 
-    # CTA button (red pill) under subtitle
+    # CTA button
     if cta_text and cta_text.strip():
-        # CTA font slightly bigger than subtitle (or half main if no subtitle)
         if sub_font is not None:
             base_size = sub_font.size
         else:
@@ -194,7 +193,6 @@ def create_top_left_text_over_image(
         cta_w = cta_bbox[2] - cta_bbox[0]
         cta_h = cta_bbox[3] - cta_bbox[1]
 
-        # Extra space between subtitle and CTA
         cta_spacing = 60
         if subtitle.strip():
             cta_y = last_sub_y + sub_line_height + cta_spacing
@@ -239,17 +237,38 @@ def create_composite_image(
         composite = Image.new('RGB', output_size, color=(247, 247, 247))
         composite.paste(resized_bg, bg_off)
 
-        # Prepare overlay (input image) to full width
+        # --- Nouvelle logique: image + overlay occupent 8/10 de la hauteur depuis le haut ---
+
+        photo_region_height = int(output_size[1] * 0.8)
+
         if overlay_image.mode != 'RGBA':
             overlay_image = overlay_image.convert('RGBA')
+
+        # Redimensionner pour largeur pleine
         resized_overlay, _ = resize_to_full_width(overlay_image,
                                                   output_size[0])
 
+        # Si trop petit en hauteur, on upscale
+        if resized_overlay.height < photo_region_height:
+            scale = photo_region_height / resized_overlay.height
+            new_w = int(resized_overlay.width * scale)
+            new_h = int(resized_overlay.height * scale)
+            resized_overlay = resized_overlay.resize((new_w, new_h),
+                                                     Image.Resampling.LANCZOS)
+
+        # Crop vertical centré pour avoir exactement 8/10 de hauteur
+        if resized_overlay.height > photo_region_height:
+            top = (resized_overlay.height - photo_region_height) // 2
+            bottom = top + photo_region_height
+            resized_overlay = resized_overlay.crop(
+                (0, top, resized_overlay.width, bottom))
+
+        # Coller tout en haut
         composite.paste(resized_overlay, (0, 0), resized_overlay)
 
-        # Transparent black overlay over the image area
-        overlay_height = resized_overlay.height
-        overlay_layer = Image.new('RGBA', (output_size[0], overlay_height),
+        # Overlay noir transparent sur cette zone 8/10
+        overlay_layer = Image.new('RGBA',
+                                  (output_size[0], photo_region_height),
                                   color=(0, 0, 0, int(255 * overlay_opacity)))
         composite.paste(overlay_layer, (0, 0), overlay_layer)
 
