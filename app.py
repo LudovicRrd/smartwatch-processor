@@ -93,43 +93,41 @@ def create_top_left_text_over_image(
         base_image,  # RGB image
         text,
         subtitle,
+        cta_text,
         font_size_main=90,
         image_size=(1080, 1920),
         margin=50,
         line_spacing=0,
-        title_bg_opacity=0.6,
-        subtitle_bg_opacity=0.6,
-        corner_radius=25  # new: rounded corner radius in px
-):
+        title_bg_opacity=0.8,
+        subtitle_bg_opacity=0.8,
+        cta_bg_opacity=0.8,
+        corner_radius=25,
+        cta_corner_radius=50):
     """
-    Draw title + subtitle, with adaptive semi-transparent strips behind each line. [web:1][web:8]
+    Draw title + subtitle + CTA at top-left, with adaptive semi-transparent rounded strips. [web:3][web:21]
     """
     max_w = image_size[0] - 2 * margin
 
-    # Use RGBA drawing mode on an RGB image so alpha blends correctly. [web:8]
     draw = ImageDraw.Draw(base_image, "RGBA")
 
     # Main title font and lines (5 lines max)
     font_main = download_quicksand_font(font_size_main)
     main_lines = split_text_into_lines(text, font_main, max_w, num_lines=5)
 
-    # Compute line height for main
     ascent_main, descent_main = font_main.getmetrics()
     line_height_main = ascent_main + descent_main + line_spacing
 
     # Colors (RGBA) for background strips
-    title_bg_color = (255, 140, 0, int(255 * title_bg_opacity)
-                      )  # orange [web:1]
-    subtitle_bg_color = (68, 159, 119, int(255 * subtitle_bg_opacity)
-                         )  # green [web:1]
+    title_bg_color = (255, 140, 0, int(255 * title_bg_opacity))  # orange
+    subtitle_bg_color = (68, 159, 119, int(255 * subtitle_bg_opacity))  # green
+    cta_bg_color = (220, 0, 0, int(255 * cta_bg_opacity))  # red
 
-    # Padding around text in the strip
     pad_x = 30
     pad_y = 20
 
     y = margin
 
-    # Draw title lines with orange background
+    # Title lines with orange background
     for line in main_lines:
         if line.strip():
             text_width = font_main.getlength(line)
@@ -145,22 +143,26 @@ def create_top_left_text_over_image(
         draw.text((margin, y), line, font=font_main, fill='white')
         y += line_height_main
 
-    # Subtitle below main (up to 2 lines, half size)
+    # Subtitle (up to 2 lines, half size, green)
+    sub_font = None
+    sub_line_height = 0
+    last_sub_y = y
+
     if subtitle.strip():
         font_sub = download_quicksand_font(font_size_main // 2)
+        sub_font = font_sub
         sub_lines = split_text_into_lines(subtitle,
                                           font_sub,
                                           max_w,
                                           num_lines=2)
 
-        # Extra spacing between title and subtitle (10px for separation)
-        y += 10
+        # Extra spacing between title and subtitle
+        y += 20
 
-        # Compute line height for subtitle
         ascent_sub, descent_sub = font_sub.getmetrics()
         line_height_sub = ascent_sub + descent_sub + line_spacing
+        sub_line_height = line_height_sub
 
-        # Draw subtitle lines with green background
         for line in sub_lines:
             if line.strip():
                 text_width = font_sub.getlength(line)
@@ -175,9 +177,45 @@ def create_top_left_text_over_image(
                                        fill=subtitle_bg_color)
 
             draw.text((margin, y), line, font=font_sub, fill='white')
+            last_sub_y = y
             y += line_height_sub
 
-    return y  # Total height used by text
+    # CTA button (red pill) under subtitle
+    if cta_text and cta_text.strip():
+        # CTA font slightly bigger than subtitle (or half main if no subtitle)
+        if sub_font is not None:
+            base_size = sub_font.size
+        else:
+            base_size = font_size_main // 2
+        cta_font_size = base_size + 0
+        font_cta = download_quicksand_font(cta_font_size)
+
+        cta_bbox = draw.textbbox((0, 0), cta_text, font=font_cta)
+        cta_w = cta_bbox[2] - cta_bbox[0]
+        cta_h = cta_bbox[3] - cta_bbox[1]
+
+        # Extra space between subtitle and CTA
+        cta_spacing = 60
+        if subtitle.strip():
+            cta_y = last_sub_y + sub_line_height + cta_spacing
+        else:
+            cta_y = y + cta_spacing
+
+        cta_pad_x = 40
+        cta_pad_y = 40
+
+        rect_x0 = max(0, margin - cta_pad_x)
+        rect_y0 = max(0, cta_y - cta_pad_y // 3)
+        rect_x1 = min(image_size[0], margin + cta_w + cta_pad_x)
+        rect_y1 = rect_y0 + cta_h + cta_pad_y
+
+        draw.rounded_rectangle([(rect_x0, rect_y0), (rect_x1, rect_y1)],
+                               radius=cta_corner_radius,
+                               fill=cta_bg_color)
+
+        draw.text((margin, cta_y), cta_text, font=font_cta, fill='white')
+
+    return y  # Total height used by text (end y)
 
 
 def create_composite_image(
@@ -186,8 +224,9 @@ def create_composite_image(
         output_path,
         text,
         subtitle,
+        cta_text,
         output_size=(1080, 1920),
-        overlay_opacity=0.4  # 0.0 to 1.0 for black overlay on the photo
+        overlay_opacity=0.1  # 0.0 to 1.0 for black overlay on the photo
 ):
     try:
         # Load and resize background image
@@ -197,29 +236,28 @@ def create_composite_image(
 
         resized_bg, bg_off = resize_image(background, output_size)
 
-        # IMPORTANT: keep composite in RGB so RGBA drawing blends alpha. [web:8]
         composite = Image.new('RGB', output_size, color=(247, 247, 247))
         composite.paste(resized_bg, bg_off)
 
-        # Prepare overlay (input image) to full width, preserving aspect
+        # Prepare overlay (input image) to full width
         if overlay_image.mode != 'RGBA':
             overlay_image = overlay_image.convert('RGBA')
         resized_overlay, _ = resize_to_full_width(overlay_image,
                                                   output_size[0])
 
-        # Paste main photo at top-left (full width)
         composite.paste(resized_overlay, (0, 0), resized_overlay)
 
-        # Add transparent black overlay over the image area (behind text). [web:1]
+        # Transparent black overlay over the image area
         overlay_height = resized_overlay.height
         overlay_layer = Image.new('RGBA', (output_size[0], overlay_height),
                                   color=(0, 0, 0, int(255 * overlay_opacity)))
         composite.paste(overlay_layer, (0, 0), overlay_layer)
 
-        # Draw title + subtitle with their own colored strips. [web:1][web:8]
+        # Title + subtitle + CTA
         create_top_left_text_over_image(base_image=composite,
                                         text=text,
                                         subtitle=subtitle,
+                                        cta_text=cta_text,
                                         font_size_main=90,
                                         image_size=output_size)
 
@@ -231,13 +269,12 @@ def create_composite_image(
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Hello! This endpoint creates 9:16 ads with: background, full-width image overlay, transparent black overlay on the photo, and adaptive semi-transparent orange/green strips behind title and subtitle."
+    return "9:16 ads with full-width image, dim overlay, orange title strips, green subtitle strips, and red CTA button."
 
 
 @app.route("/process-image", methods=["POST"])
 def process_image():
     try:
-        # Get the overlay image from URL
         image_url = request.form.get("image_url")
         if not image_url:
             return jsonify({"error": "No 'image_url' provided"}), 400
@@ -249,12 +286,17 @@ def process_image():
 
         overlay_image = Image.open(io.BytesIO(response.content))
 
-        # Retrieve the text and subtitle
+        # Main title text
         text = request.form.get("text", "Default title text overlay on image")
+
+        # Subtitle
         subtitle = request.form.get("subtitle", "")
 
-        # Optional overlay opacity parameter (0.0 to 1.0) for the black photo overlay
-        overlay_opacity = float(request.form.get("overlay_opacity", 0.4))
+        # CTA text (button)
+        cta_text = request.form.get("cta", "")
+
+        # Optional dim overlay opacity on the photo
+        overlay_opacity = float(request.form.get("overlay_opacity", 0.1))
 
         background_path = "background-p3.png"
         final_path = "results/final_image.jpg"
@@ -264,6 +306,7 @@ def process_image():
                                               output_path=final_path,
                                               text=text,
                                               subtitle=subtitle,
+                                              cta_text=cta_text,
                                               output_size=(1080, 1920),
                                               overlay_opacity=overlay_opacity)
 
