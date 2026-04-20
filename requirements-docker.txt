@@ -1,0 +1,5 @@
+# Minimal deps for app.py (VPS Docker). Full requirements.txt includes unused ML packages.
+Flask==2.3.2
+Pillow==9.5.0
+requests==2.31.0
+gunicorn==20.1.0
