@@ -3,13 +3,88 @@ from PIL import Image, ImageDraw, ImageFont
 import requests
 import io
 import os
-import random
-import string
 
 app = Flask(__name__)
 
 # Ensure there's a 'results' folder for saving final images
 os.makedirs("results", exist_ok=True)
+
+
+def parse_rgb_color(value):
+    """Parse #RGB, #RRGGBB, or 'r,g,b' into an (R, G, B) tuple."""
+    if value is None:
+        raise ValueError("missing color")
+    s = str(value).strip()
+    if not s:
+        raise ValueError("empty color")
+    if s.startswith("#"):
+        hexv = s[1:]
+        if len(hexv) == 3:
+            r, g, b = (int(c, 16) * 17 for c in hexv)
+        elif len(hexv) == 6:
+            r = int(hexv[0:2], 16)
+            g = int(hexv[2:4], 16)
+            b = int(hexv[4:6], 16)
+        else:
+            raise ValueError("invalid hex color")
+        return (r, g, b)
+    parts = [p.strip() for p in s.split(",")]
+    if len(parts) != 3:
+        raise ValueError("color must be #hex or r,g,b")
+    return tuple(int(float(x)) for x in parts)
+
+
+def build_background_from_colors(
+        output_size,
+        color_top,
+        color_bottom,
+        bottom_band_ratio=0.25,
+        logo_image=None,
+        logo_max_height_fraction=0.55):
+    """
+    Two horizontal bands (like background.png): top is larger, bottom strip for branding.
+    Optional logo pasted bottom-right in the bottom band (respects alpha).
+    """
+    w, h = output_size
+    split_y = max(1, int(h * (1 - bottom_band_ratio)))
+    img = Image.new("RGB", output_size, color_top)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([0, split_y, w, h], fill=color_bottom)
+
+    if logo_image is None:
+        return img
+
+    logo_image = logo_image.copy()
+    if logo_image.mode != "RGBA":
+        logo_image = logo_image.convert("RGBA")
+
+    lw, lh = logo_image.size
+    band_h = h - split_y
+    max_h = max(1, int(band_h * logo_max_height_fraction))
+    max_w = max(1, int(w * 0.45))
+    scale = min(max_h / lh, max_w / lw, 1.0)
+    nw, nh = max(1, int(lw * scale)), max(1, int(lh * scale))
+    logo_r = logo_image.resize((nw, nh), Image.Resampling.LANCZOS)
+
+    pad = max(20, int(w * 0.02))
+    x = w - nw - pad
+    y = h - nh - pad
+    img.paste(logo_r, (x, y), logo_r)
+    return img
+
+
+def load_background_image(background_path_or_image, output_size):
+    """Open path or use PIL Image, convert to RGB, letterbox to output_size."""
+    if isinstance(background_path_or_image, str):
+        background = Image.open(background_path_or_image)
+    else:
+        background = background_path_or_image
+    if background.mode != "RGB":
+        background = background.convert("RGB")
+    resized_bg, bg_off = resize_image(background, output_size)
+    composite = Image.new("RGB", output_size)
+    composite.paste(resized_bg, bg_off)
+    return composite
 
 
 def download_quicksand_font(font_size=70):
@@ -233,7 +308,7 @@ def create_left_text_with_subtitle_and_cta(
 
 
 def create_composite_image(
-        background_path,
+        background_path_or_image,
         overlay_image,  # Image object
         output_path,
         text_parts,
@@ -243,16 +318,11 @@ def create_composite_image(
         text_y_offset=0,
         overlay_opacity=0.1):
     """
-    Compose background, zoomed overlay image with dim, then left-aligned title + subtitle + CTA button.
+    Compose background (file path or PIL Image), zoomed overlay image with dim,
+    then left-aligned title + subtitle + CTA button.
     """
     try:
-        background = Image.open(background_path)
-        if background.mode != 'RGB':
-            background = background.convert('RGB')
-        resized_bg, bg_off = resize_image(background, output_size)
-
-        composite = Image.new('RGB', output_size)
-        composite.paste(resized_bg, bg_off)
+        composite = load_background_image(background_path_or_image, output_size)
 
         # Overlay area: full width, top 5/6 of height
         if overlay_image.mode != 'RGBA':
@@ -297,7 +367,11 @@ def create_composite_image(
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Hello! This endpoint uses a super background + URL overlay image, with dimmed image, left-aligned orange title, green subtitle, and red CTA button."
+    return (
+        "POST /process-image: image_url (required), text, subtitle, cta, overlay_opacity. "
+        "Optional custom background: bg_color_1, bg_color_2 (#hex or r,g,b), logo_url (PNG). "
+        "If colors are omitted, background.png is used."
+    )
 
 
 @app.route("/process-image", methods=["POST"])
@@ -326,18 +400,55 @@ def process_image():
 
         overlay_opacity = float(request.form.get("overlay_opacity", 0.1))
 
-        background_path = "background.png"
+        c1 = request.form.get("bg_color_1")
+        c2 = request.form.get("bg_color_2")
+        logo_url = (request.form.get("logo_url") or "").strip()
+
+        if c1 is not None and str(c1).strip() and c2 is not None and str(c2).strip():
+            try:
+                color_top = parse_rgb_color(c1)
+                color_bottom = parse_rgb_color(c2)
+            except ValueError as e:
+                return jsonify({"error": f"Invalid background color: {e}"}), 400
+            logo_img = None
+            if logo_url:
+                try:
+                    lr = requests.get(logo_url, timeout=30)
+                    if lr.status_code != 200:
+                        return jsonify(
+                            {"error": f"Failed to download logo from {logo_url}"}
+                        ), 400
+                    logo_img = Image.open(io.BytesIO(lr.content))
+                except Exception as e:
+                    return jsonify({"error": f"Logo error: {str(e)}"}), 400
+            out_sz = (1640, 1640)
+            background_source = build_background_from_colors(
+                out_sz,
+                color_top,
+                color_bottom,
+                logo_image=logo_img,
+            )
+        elif (c1 is not None and str(c1).strip()) or (
+                c2 is not None and str(c2).strip()):
+            return jsonify(
+                {"error": "Provide both bg_color_1 and bg_color_2, or neither (use background.png)"}
+            ), 400
+        else:
+            background_source = "background.png"
+
         final_path = "results/final_image.jpg"
 
-        success, msg = create_composite_image(background_path=background_path,
-                                              overlay_image=overlay_image,
-                                              output_path=final_path,
-                                              text_parts=text_parts,
-                                              subtitle=subtitle,
-                                              cta_text=cta_text,
-                                              output_size=(1640, 1640),
-                                              text_y_offset=-50,
-                                              overlay_opacity=overlay_opacity)
+        success, msg = create_composite_image(
+            background_path_or_image=background_source,
+            overlay_image=overlay_image,
+            output_path=final_path,
+            text_parts=text_parts,
+            subtitle=subtitle,
+            cta_text=cta_text,
+            output_size=(1640, 1640),
+            text_y_offset=-50,
+            overlay_opacity=overlay_opacity,
+        )
 
         if not success:
             return jsonify({"error": msg}), 500
