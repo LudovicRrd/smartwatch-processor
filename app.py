@@ -143,22 +143,15 @@ def create_left_text_with_subtitle_and_cta(
         font,
         image_size,
         y_offset=0,
-        title_bg_opacity=0.8,
-        subtitle_bg_opacity=0.8,
-        cta_bg_opacity=0.8,
-        corner_radius=15,
-        cta_corner_radius=60):
+        text_color=(255, 255, 255)):
     """
-    Draw two title lines (orange overlay) left-aligned,
-    then subtitle (green overlay) and CTA button (red overlay) below. [web:3][web:21][web:51]
+    Draw title (2 lines), subtitle and CTA as centered text.
+    No rectangle backgrounds are drawn behind text.
     """
     draw = ImageDraw.Draw(base_image, "RGBA")
 
     image_width = image_size[0]
     top_text, bottom_text = text_parts
-
-    # Left margin for all text
-    margin_x = 260
 
     # Measure title lines
     top_bbox = draw.textbbox((0, 0), top_text, font=font)
@@ -169,8 +162,8 @@ def create_left_text_with_subtitle_and_cta(
     bottom_w = bottom_bbox[2] - bottom_bbox[0]
     bottom_h = bottom_bbox[3] - bottom_bbox[1]
 
-    # Gap between the two title lines
-    spacing_title_lines = 40
+    # Keep title lines visually tight
+    spacing_title_lines = 4
     total_h = top_h + bottom_h + spacing_title_lines
 
     # Vertical position of title block
@@ -178,43 +171,16 @@ def create_left_text_with_subtitle_and_cta(
     top_y = center_y - total_h // 2
     bottom_y = top_y + top_h + spacing_title_lines
 
-    # Colors (RGBA)
-    title_bg_color = (56, 56, 56, int(255 * title_bg_opacity)
-                      )  # orange for title
-    subtitle_bg_color = (56, 56, 56, int(255 * subtitle_bg_opacity)
-                         )  # green for subtitle
-    cta_bg_color = (68, 159, 119, int(255 * cta_bg_opacity))  # red for CTA
+    top_x = (image_width - top_w) // 2
+    bottom_x = (image_width - bottom_w) // 2
 
-    pad_x = 50
-    pad_y = 50
-
-    # First title line (orange)
     if top_text.strip():
-        rect_x0 = max(0, margin_x - pad_x)
-        rect_y0 = max(0, top_y - pad_y // 5)
-        rect_x1 = min(image_width, margin_x + top_w + pad_x)
-        rect_y1 = rect_y0 + top_h + pad_y
+        draw.text((top_x, top_y), top_text, font=font, fill=text_color)
 
-        draw.rounded_rectangle([(rect_x0, rect_y0), (rect_x1, rect_y1)],
-                               radius=corner_radius,
-                               fill=title_bg_color)
-
-    draw.text((margin_x, top_y), top_text, font=font, fill='white')
-
-    # Second title line (also orange)
     if bottom_text.strip():
-        rect_x0 = max(0, margin_x - pad_x)
-        rect_y0 = max(0, bottom_y - pad_y // 5)
-        rect_x1 = min(image_width, margin_x + bottom_w + pad_x)
-        rect_y1 = rect_y0 + bottom_h + pad_y
+        draw.text((bottom_x, bottom_y), bottom_text, font=font, fill=text_color)
 
-        draw.rounded_rectangle([(rect_x0, rect_y0), (rect_x1, rect_y1)],
-                               radius=corner_radius,
-                               fill=title_bg_color)
-
-    draw.text((margin_x, bottom_y), bottom_text, font=font, fill='white')
-
-    # Subtitle below title block, smaller font, green overlay
+    # Subtitle below title block
     subtitle_y = bottom_y + bottom_h
     sub_h = 0
 
@@ -226,35 +192,18 @@ def create_left_text_with_subtitle_and_cta(
         sub_w = sub_bbox[2] - sub_bbox[0]
         sub_h = sub_bbox[3] - sub_bbox[1]
 
-        # More space between title and subtitle
         subtitle_spacing = 100
         subtitle_y = bottom_y + bottom_h + subtitle_spacing
 
-        sub_pad_x = 40
-        sub_pad_y = 30
-
-        rect_x0 = max(0, margin_x - sub_pad_x)
-        rect_y0 = max(0, subtitle_y - sub_pad_y // 3)
-        rect_x1 = min(image_width, margin_x + sub_w + sub_pad_x)
-        rect_y1 = rect_y0 + sub_h + sub_pad_y
-
-        draw.rounded_rectangle([(rect_x0, rect_y0), (rect_x1, rect_y1)],
-                               radius=corner_radius,
-                               fill=subtitle_bg_color)
-
-        draw.text((margin_x, subtitle_y),
+        sub_x = (image_width - sub_w) // 2
+        draw.text((sub_x, subtitle_y),
                   subtitle,
                   font=sub_font,
-                  fill='white')
+                  fill=text_color)
 
-    # CTA button under subtitle, red pill, slightly larger font than subtitle
+    # CTA text below subtitle
     if cta_text.strip():
-        if subtitle.strip():
-            base_font_size = max(50, font.size // 2.2)
-        else:
-            base_font_size = max(50, font.size // 2.2)
-
-        cta_font_size = max(50, font.size // 2.2)  # a bit bigger than subtitle
+        cta_font_size = max(50, font.size // 2.2)
         cta_font = download_quicksand_font(cta_font_size)
 
         cta_bbox = draw.textbbox((0, 0), cta_text, font=cta_font)
@@ -267,20 +216,8 @@ def create_left_text_with_subtitle_and_cta(
         else:
             cta_y = bottom_y + bottom_h + cta_spacing
 
-        cta_pad_x = 40
-        cta_pad_y = 40
-
-        rect_x0 = max(0, margin_x - cta_pad_x)
-        rect_y0 = max(0, cta_y - cta_pad_y // 4)
-        rect_x1 = min(image_width, margin_x + cta_w + cta_pad_x)
-        rect_y1 = rect_y0 + cta_h + cta_pad_y
-
-        draw.rounded_rectangle(
-            [(rect_x0, rect_y0), (rect_x1, rect_y1)],
-            radius=cta_corner_radius,  # very rounded = pill‑like
-            fill=cta_bg_color)
-
-        draw.text((margin_x, cta_y), cta_text, font=cta_font, fill='white')
+        cta_x = (image_width - cta_w) // 2
+        draw.text((cta_x, cta_y), cta_text, font=cta_font, fill=text_color)
 
     return total_h
 
@@ -294,7 +231,8 @@ def create_composite_image(
         cta_text,
         output_size=(1640, 840),
         text_y_offset=0,
-        overlay_opacity=0.1):
+        overlay_opacity=0.1,
+        text_color=(255, 255, 255)):
     """
     Compose background (PIL Image or path), uploaded image centered (contain),
     same layout as Hostinger main.py: max box width × (width/3), then dim + text.
@@ -320,8 +258,8 @@ def create_composite_image(
                 color=(0, 0, 0, int(255 * overlay_opacity)))
             composite.paste(overlay_layer, (overlay_x, overlay_y), overlay_layer)
 
-        # Title (2 lines, left) + subtitle + CTA
-        font = download_quicksand_font(80)
+        # Title + subtitle + CTA
+        font = download_quicksand_font(64)
         create_left_text_with_subtitle_and_cta(base_image=composite,
                                                text_parts=text_parts,
                                                subtitle=subtitle,
@@ -329,11 +267,7 @@ def create_composite_image(
                                                font=font,
                                                image_size=output_size,
                                                y_offset=text_y_offset,
-                                               title_bg_opacity=0.7,
-                                               subtitle_bg_opacity=0.7,
-                                               cta_bg_opacity=0.7,
-                                               corner_radius=15,
-                                               cta_corner_radius=60)
+                                               text_color=text_color)
 
         composite.save(output_path, 'JPEG', quality=95)
         return True, "Composite created successfully!"
@@ -345,7 +279,8 @@ def create_composite_image(
 def home():
     return (
         "POST /process-image: image_url (required); bg_color_1 (top ~2/3), bg_color_2 (bottom ~1/3), "
-        "#hex or r,g,b; optional logo_url; text, subtitle, cta, overlay_opacity. Output 1640×840 JPEG."
+        "#hex or r,g,b; optional logo_url; text, subtitle, cta, text_color, overlay_opacity. "
+        "Output 1640×840 JPEG."
     )
 
 
@@ -374,6 +309,7 @@ def process_image():
         cta_text = request.form.get("cta", "")
 
         overlay_opacity = float(request.form.get("overlay_opacity", 0.1))
+        text_color_raw = request.form.get("text_color", "#ffffff")
 
         c1 = request.form.get("bg_color_1")
         c2 = request.form.get("bg_color_2")
@@ -387,8 +323,9 @@ def process_image():
         try:
             color_top = parse_rgb_color(c1)
             color_bottom = parse_rgb_color(c2)
+            text_color = parse_rgb_color(text_color_raw)
         except ValueError as e:
-            return jsonify({"error": f"Invalid background color: {e}"}), 400
+            return jsonify({"error": f"Invalid color input: {e}"}), 400
 
         logo_img = None
         if logo_url:
@@ -422,6 +359,7 @@ def process_image():
             output_size=out_sz,
             text_y_offset=-50,
             overlay_opacity=overlay_opacity,
+            text_color=text_color,
         )
 
         if not success:
